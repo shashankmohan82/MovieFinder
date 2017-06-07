@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.support.v7.widget.CardView;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.SparseBooleanArray;
@@ -16,7 +17,9 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.androidtmdbwrapper.enums.MediaType;
@@ -34,6 +37,7 @@ import task.application.com.moviefinder.R;
 import task.application.com.moviefinder.model.local.realm.datamodels.MediaItem;
 import task.application.com.moviefinder.ui.itemdetail.SearchItemDetailActivity;
 import task.application.com.moviefinder.ui.utility.realmrecview.RealmRecViewAdapter;
+import task.application.com.moviefinder.util.ItemOffsetDecoration;
 import task.application.com.moviefinder.util.Util;
 
 
@@ -72,6 +76,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
+        getActivity().getTheme().applyStyle(R.style.AppTheme_NoActionBar_RippleEffectCustom, true);
         View rootView = inflater.inflate(R.layout.fragment_favorites_tv, container, false);
         recView = (RecyclerView) rootView.findViewById(R.id.fav_rec_view);
         setUpRecyclerView();
@@ -79,11 +84,18 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     }
 
     private void setUpRecyclerView() {
-        RecyclerView.LayoutManager layoutManager = new GridLayoutManager(getActivity(), 2);
+        RecyclerView.LayoutManager layoutManager = new GridLayoutManager(getActivity(), 2) {
+            @Override
+            public boolean supportsPredictiveItemAnimations() {
+                return true;
+            }
+        };
         recView.setLayoutManager(layoutManager);
         adapter = new RecViewAdapter(null, itemTouchListener);
+        recView.addItemDecoration(new ItemOffsetDecoration(getActivity(), R.dimen.rec_view_itemoffset));
         recView.setAdapter(adapter);
-        presenter.fetchDataFromRealm(FILTER);
+        if (presenter != null)
+            presenter.fetchDataFromRealm(FILTER);
     }
 
     ItemTouchListener itemTouchListener = new ItemTouchListener() {
@@ -105,11 +117,17 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
                 return true;
             }
             isMultiSelect = true;
+
             actionMode = getActivity().startActionMode(actionCallback);
+            animateLayoutShiftDown();
             toggleSelection(position);
             return true;
         }
     };
+
+    private void animateLayoutShiftDown() {
+
+    }
 
     private void toggleSelection(int position) {
         adapter.toggleSelection(position);
@@ -127,6 +145,8 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         public boolean onCreateActionMode(ActionMode mode, Menu menu) {
             MenuInflater inflater = mode.getMenuInflater();
             inflater.inflate(R.menu.rec_view_contextual_menu, menu);
+            CheckBox selectAll = (CheckBox) menu.findItem(R.id.select_all).getActionView();
+            selectAll.setButtonDrawable(R.drawable.cab_checkbox_selector);
             return true;
         }
 
@@ -142,6 +162,8 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
                     deleteSelectedItems();
                     mode.finish();
                     return true;
+                case R.id.select_all:
+                    item.setChecked(true);
             }
             return false;
         }
@@ -156,9 +178,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
 
     private void deleteSelectedItems() {
         final List<Integer> items = adapter.getSelectedItems();
-        for (int pos : items) {
-            adapter.removeItem(pos);
-        }
+        presenter.deleteDataFromRealm(items, adapter.getData().createSnapshot());
     }
 
     @Override
@@ -181,13 +201,15 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     @Override
     public void onDestroy() {
         super.onDestroy();
-        presenter.destroy();
+        if (presenter != null)
+            presenter.destroy();
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        presenter.start();
+        if (presenter != null)
+            presenter.start();
     }
 
     @Override
@@ -237,24 +259,13 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         public void onBindViewHolder(ViewHolder holder, int position) {
             OrderedRealmCollection<MediaItem> data = getData();
             if (data == null) return;
-            if (selectedItems.get(position, false))
-                holder.itemView.setAlpha(0.5f);
-            else
-                holder.itemView.setAlpha(1f);
             holder.backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Picasso.with(getActivity()).load("https://image.tmdb.org/t/p/w500" + data.get(position).getBackDrop())
-                        .error(R.drawable.fav_media_placeholder)
-                        .placeholder(R.drawable.fav_media_placeholder)
+                    .error(R.drawable.movie)
+                    .placeholder(R.drawable.movie)
                         .into(holder.backdrop);
             holder.title.setText(getData().get(position).getTitle());
 
-        }
-
-        public void removeItem(final int pos) {
-            realm.executeTransaction(realm1 -> {
-                getData().deleteFromRealm(pos);
-                notifyDataSetChanged();
-            });
         }
 
         public void toggleSelection(int position) {
@@ -281,20 +292,28 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
             return itemIndices;
         }
 
+        public void ToggleCheckBoxState() {
+
+        }
+
 
         public class ViewHolder extends RecyclerView.ViewHolder {
             private ImageView backdrop;
             private TextView title;
+            private CheckBox checkBox;
 
             public ViewHolder(View itemView) {
                 super(itemView);
-                backdrop = (ImageView) itemView.findViewById(R.id.backdrop);
-                title = (TextView) itemView.findViewById(R.id.title);
-                itemView.setOnClickListener(view ->
+                if (itemView instanceof LinearLayout) {
+                    CardView cardView = (CardView) ((LinearLayout) itemView).findViewById(R.id.card_view);
+                    backdrop = (ImageView) itemView.findViewById(R.id.backdrop);
+                    title = (TextView) itemView.findViewById(R.id.title);
+                    cardView.setOnClickListener(view ->
 
-                        listener.onItemClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
-                itemView.setOnLongClickListener(view ->
-                        listener.onItemLongClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
+                            listener.onItemClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
+                    cardView.setOnLongClickListener(view ->
+                            listener.onItemLongClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
+                }
             }
         }
     }
@@ -305,8 +324,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     }
 
     interface ItemTouchListener {
-void onItemClick(View view, int position, MediaItem item);
-
+        void onItemClick(View view, int position, MediaItem item);
         boolean onItemLongClick(View view, int position, MediaItem item);
     }
 
