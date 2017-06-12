@@ -1,11 +1,15 @@
 package task.application.com.moviefinder.ui.favorites;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.design.widget.BottomNavigationView;
 import android.support.v4.app.Fragment;
+import android.support.v4.widget.NestedScrollView;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -17,7 +21,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.animation.AccelerateInterpolator;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -30,7 +37,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.realm.OrderedRealmCollection;
-import io.realm.Realm;
 import io.realm.RealmResults;
 import task.application.com.moviefinder.ApplicationClass;
 import task.application.com.moviefinder.R;
@@ -45,14 +51,17 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
 
 
     private static String FILTER = "";
+    private static final int PARENT_BOTTOM_MARGIN = 56;
     private OnFragmentInteractionListener mListener;
     private RecyclerView recView;
-    private Realm realm;
     private RecViewAdapter adapter;
     private FavoritesMediaContract.Presenter presenter;
 
     private boolean isMultiSelect;
     private ActionMode actionMode;
+    private BottomNavigationView bottomNavigationView;
+    private FrameLayout searchBarContainer;
+    private NestedScrollView parentLayout;
 
     public FavoritesMediaFragment() {
         // Required empty public constructor
@@ -70,7 +79,14 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         super.onCreate(savedInstanceState);
         if (getArguments() != null && getArguments().containsKey("FILTER"))
             FILTER = getArguments().getString("FILTER");
-        realm = Realm.getDefaultInstance();
+    }
+
+    @Override
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        bottomNavigationView = (BottomNavigationView) getActivity().findViewById(R.id.navigation);
+        searchBarContainer = (FrameLayout) getActivity().findViewById(R.id.search_bar);
+        parentLayout = (NestedScrollView) getActivity().findViewById(R.id.scrollingView);
     }
 
     @Override
@@ -91,6 +107,18 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
             }
         };
         recView.setLayoutManager(layoutManager);
+        recView.setNestedScrollingEnabled(false);
+        recView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+            }
+
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+            }
+        });
         adapter = new RecViewAdapter(null, itemTouchListener);
         recView.addItemDecoration(new ItemOffsetDecoration(getActivity(), R.dimen.rec_view_itemoffset));
         recView.setAdapter(adapter);
@@ -106,7 +134,6 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
                 presenter.showMediaDetails(item);
             else {
                 toggleSelection(position);
-
             }
         }
 
@@ -117,20 +144,70 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
                 return true;
             }
             isMultiSelect = true;
-
-            actionMode = getActivity().startActionMode(actionCallback);
-            animateLayoutShiftDown();
-            toggleSelection(position);
+            animateSearchBar(-1, View.GONE, position);
             return true;
         }
+
+        @Override
+        public void onCheckboxClick(int position, MediaItem item) {
+            setSelectedItemCount();
+        }
+
     };
 
-    private void animateLayoutShiftDown() {
+    private void animateSearchBar(final int direction, final int visibility, final int position) {
+        if (searchBarContainer == null) return;
+        searchBarContainer.animate()
+                .setDuration(200)
+                .translationY(direction * searchBarContainer.getHeight())
+                .setInterpolator(new AccelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        super.onAnimationEnd(animation);
+                        searchBarContainer.setVisibility(visibility);
+                        searchBarContainer.animate().setListener(null);
+                        actionMode = getActivity().startActionMode(actionCallback);
+                        adapter.notifyDataSetChanged();
+                        toggleSelection(position);
+                        animateBotNavChanges(1, View.GONE, true, 0);
+                    }
+                });
+    }
 
+    private void animateBotNavChanges(final int direction, final int visibility, boolean add, final int margin) {
+        if (bottomNavigationView == null) return;
+        bottomNavigationView.animate()
+                .translationY(direction * bottomNavigationView.getHeight())
+                .setDuration(200)
+                .setInterpolator(new AccelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        super.onAnimationEnd(animation);
+                        if (add)
+                            getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+                        else
+                            getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+                        setParentLayoutBottomMargin(margin);
+                        bottomNavigationView.setVisibility(visibility);
+                        bottomNavigationView.animate().setListener(null);
+                    }
+                });
+    }
+
+    private void setParentLayoutBottomMargin(int margin) {
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) parentLayout.getLayoutParams();
+        params.bottomMargin = margin;
+        parentLayout.setLayoutParams(params);
     }
 
     private void toggleSelection(int position) {
         adapter.toggleSelection(position);
+        setSelectedItemCount();
+    }
+
+    private void setSelectedItemCount() {
         if (adapter.getSelectedItemCount() == 0) {
             actionMode.finish();
             return;
@@ -171,8 +248,11 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         @Override
         public void onDestroyActionMode(ActionMode mode) {
             actionMode = null;
+            searchBarContainer.setTranslationY(0);
+            searchBarContainer.setVisibility(View.VISIBLE);
             isMultiSelect = false;
             adapter.clearSelections();
+            animateBotNavChanges(0, View.VISIBLE, false, PARENT_BOTTOM_MARGIN);
         }
     };
 
@@ -180,6 +260,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         final List<Integer> items = adapter.getSelectedItems();
         presenter.deleteDataFromRealm(items, adapter.getData().createSnapshot());
     }
+
 
     @Override
     public void onAttach(Context context) {
@@ -201,8 +282,12 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (actionMode != null) {
+            actionMode.finish();
+        }
         if (presenter != null)
             presenter.destroy();
+
     }
 
     @Override
@@ -211,6 +296,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         if (presenter != null)
             presenter.start();
     }
+
 
     @Override
     public void setPresenter(FavoritesMediaContract.Presenter presenter) {
@@ -259,20 +345,22 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         public void onBindViewHolder(ViewHolder holder, int position) {
             OrderedRealmCollection<MediaItem> data = getData();
             if (data == null) return;
-            holder.backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            holder.checkBox.setVisibility(isMultiSelect ? View.VISIBLE : View.GONE);
+            toggleCheckBoxState(isMultiSelect && selectedItems.get(position, false), position, holder);
             Picasso.with(getActivity()).load("https://image.tmdb.org/t/p/w500" + data.get(position).getBackDrop())
-                    .error(R.drawable.movie)
-                    .placeholder(R.drawable.movie)
-                        .into(holder.backdrop);
+                    .error(R.drawable.trailer1)
+                    .placeholder(R.drawable.trailer1)
+                    .into(holder.backdrop);
             holder.title.setText(getData().get(position).getTitle());
 
         }
 
         public void toggleSelection(int position) {
-            if (selectedItems.get(position, false))
+            if (selectedItems.get(position, false)) {
                 selectedItems.delete(position);
-            else
+            } else {
                 selectedItems.put(position, true);
+            }
             notifyItemChanged(position);
         }
 
@@ -281,6 +369,7 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
         }
 
         public void clearSelections() {
+            List<Integer> list = getSelectedItems();
             selectedItems.clear();
             notifyDataSetChanged();
         }
@@ -292,8 +381,9 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
             return itemIndices;
         }
 
-        public void ToggleCheckBoxState() {
-
+        public void toggleCheckBoxState(boolean state, int position, ViewHolder holder) {
+            holder.checkBox.setChecked(state);
+            holder.backdrop.setScaleType(state ? ImageView.ScaleType.CENTER_INSIDE : ImageView.ScaleType.CENTER_CROP);
         }
 
 
@@ -308,11 +398,15 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
                     CardView cardView = (CardView) ((LinearLayout) itemView).findViewById(R.id.card_view);
                     backdrop = (ImageView) itemView.findViewById(R.id.backdrop);
                     title = (TextView) itemView.findViewById(R.id.title);
+                    checkBox = (CheckBox) itemView.findViewById(R.id.checkBox);
                     cardView.setOnClickListener(view ->
-
                             listener.onItemClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
                     cardView.setOnLongClickListener(view ->
                             listener.onItemLongClick(view, getAdapterPosition(), getItem(getAdapterPosition())));
+                    checkBox.setOnClickListener(view -> {
+                        toggleSelection(getAdapterPosition());
+                        listener.onCheckboxClick(getAdapterPosition(), getItem(getAdapterPosition()));
+                    });
                 }
             }
         }
@@ -326,6 +420,8 @@ public class FavoritesMediaFragment extends Fragment implements FavoritesMediaCo
     interface ItemTouchListener {
         void onItemClick(View view, int position, MediaItem item);
         boolean onItemLongClick(View view, int position, MediaItem item);
+
+        void onCheckboxClick(int position, MediaItem item);
     }
 
 }

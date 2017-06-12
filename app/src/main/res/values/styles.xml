@@ -8,6 +8,7 @@
         <item name="colorAccent">@color/colorAccent</item>
         <item name="colorControlHighlight">@color/colorAccent</item>
         <item name="windowActionModeOverlay">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:actionModeStyle">@style/ActionMode</item>
     </style>
 
@@ -16,8 +17,13 @@
         <item name="windowNoTitle">true</item>
         <item name="windowActionModeOverlay">true</item>
         <item name="android:windowTranslucentStatus">true</item>
-        <item name="android:statusBarColor">@color/status_bar_light_grey</item>
+        <item name="@android:statusBarColor">@color/status_bar_light_grey</item>
     </style>
+
+    <style name="AppTheme.NoActionBar.RippleEffectCustom">
+        <item name="android:colorControlHighlight">@android:color/darker_gray</item>
+    </style>
+
 
     <style name="ActionMode" parent="Widget.AppCompat.ActionMode">
         <item name="android:height">?attr/actionBarSize</item>
@@ -70,12 +76,14 @@
     </style>
 
     <style name="TextAppearance.Body1" parent="TextAppearance.AppCompat.Body1">
-        <item name="android:textSize">14sp</item> <!-- bug in AppCompat, can remove this when it's fixed -->
+        <item name="android:textSize">14sp
+        </item> <!-- bug in AppCompat, can remove this when it's fixed -->
         <item name="android:textColor">?android:textColorSecondary</item>
     </style>
 
     <style name="TextAppearance.Body2" parent="TextAppearance.AppCompat.Body2">
-        <item name="android:textSize">14sp</item> <!-- bug in AppCompat, can remove this when it's fixed -->
+        <item name="android:textSize">14sp
+        </item> <!-- bug in AppCompat, can remove this when it's fixed -->
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">?android:textColorSecondary</item>
     </style>

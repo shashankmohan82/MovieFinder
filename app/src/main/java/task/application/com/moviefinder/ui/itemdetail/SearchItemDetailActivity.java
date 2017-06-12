@@ -21,6 +21,7 @@ public class SearchItemDetailActivity extends NavigationDrawerActivity implement
 
     private SearchItemDetailPresenter presenter;
     private AppCompatImageButton menuButton;
+    private FragmentPrime fragment;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,15 +32,16 @@ public class SearchItemDetailActivity extends NavigationDrawerActivity implement
         if (getIntent().hasExtra(SEARCH_ITEM)) {
             bundle = getIntent().getBundleExtra(SEARCH_ITEM);
         }
+
         menuButton = (AppCompatImageButton) findViewById(R.id.menu_button);
         menuButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openDrawer();
+                onBackPressed();
             }
         });
 
-        FragmentPrime fragment = (FragmentPrime)
+        fragment = (FragmentPrime)
                 getSupportFragmentManager().findFragmentByTag(SEARCH_ITEM_DETAIL);
         if (fragment == null) {
             fragment = FragmentPrime.newInstance(bundle);
@@ -47,6 +49,13 @@ public class SearchItemDetailActivity extends NavigationDrawerActivity implement
                     R.id.detail_parent, SEARCH_ITEM_DETAIL);
         }
         this.presenter = new SearchItemDetailPresenter(fragment);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (presenter == null)
+            this.presenter = new SearchItemDetailPresenter(fragment);
     }
 
     @Override
